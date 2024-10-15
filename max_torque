@@ -1,0 +1,1 @@
+SELECT max(torque),time FROM Measurement_Raw_data;
