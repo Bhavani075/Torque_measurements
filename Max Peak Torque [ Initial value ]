@@ -1,0 +1,13 @@
+---Max Peak Torque[ Initial value ]
+WITH initial_value AS (
+    SELECT torque, ROW_NUMBER() OVER (ORDER BY time) AS rn--assign row_number acc.to time
+    FROM Measurement_Raw_data
+),
+max_torque_data AS (
+    SELECT MAX(torque) AS max_torque, rn AS row_num   --finding max(torque) value and its row_num
+    FROM initial_value
+)
+SELECT AVG(torque) AS avg_torque
+FROM initial_value
+WHERE rn > (SELECT row_num FROM max_torque_data)   -- Select rows after the maximum torque
+AND rn <= (SELECT row_num FROM max_torque_data) + 4000;   --select 4000 rows after the maximun torque
