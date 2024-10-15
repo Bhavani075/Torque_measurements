@@ -1,0 +1,6 @@
+SELECT 
+    CASE 
+        WHEN COUNT(CASE WHEN torque >= -0.5 THEN 1 END) >= 50000 THEN 'clockwise'
+        ELSE 'anticlockwise' 
+    END AS direction
+FROM Measurement_Raw_data;
