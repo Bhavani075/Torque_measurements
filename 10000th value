@@ -1,0 +1,10 @@
+WITH initial_value AS (
+    SELECT torque, ROW_NUMBER() OVER (ORDER BY time) AS rn
+    FROM Measurement_Raw_data
+),
+max_torque_data AS (
+    SELECT MAX(torque) AS max_torque, rn AS row_num   
+    FROM initial_value
+)
+SELECT torque FROM initial_value
+WHERE rn = (SELECT row_num FROM max_torque_data) + 10000;  
