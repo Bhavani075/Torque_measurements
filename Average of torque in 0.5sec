@@ -1,0 +1,1 @@
+SELECT avg(torque) FROM Measurement_Raw_data WHERE time<=0.5;
