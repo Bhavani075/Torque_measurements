@@ -1,0 +1,13 @@
+----createing a table, then refresh the screen
+
+create table test_data2
+(torque int,
+time real)
+
+----selecting the table
+
+select * from  test_data2;   
+
+----export CSV file (edit the file and add column names to the file)
+----import the file to dbeaver and load the file to table test_data2
+----Data is ready to use in the table
