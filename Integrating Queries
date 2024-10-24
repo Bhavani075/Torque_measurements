@@ -1,0 +1,9 @@
+SELECT 
+    CASE 
+        WHEN COUNT(CASE WHEN torque >= -0.5 THEN 1 END) >= 50000 THEN 'clockwise'
+        ELSE 'anticlockwise' 
+    END AS direction,
+    (SELECT MAX(torque) FROM Measurement_Raw_data) AS max_torque,
+    (SELECT time  FROM Measurement_Raw_data WHERE torque = (SELECT MAX(torque) FROM Measurement_Raw_data)) AS max_torque_time,
+    (SELECT AVG(torque) FROM Measurement_Raw_data WHERE time <= 0.5) AS avg_torque
+FROM Measurement_Raw_data;
