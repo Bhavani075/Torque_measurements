@@ -1,3 +1,6 @@
+----Determine Direction CW or ACW, Max(torque), avg(torque)<=0.5
+
+
 SELECT 
     CASE 
         WHEN COUNT(CASE WHEN torque >= -0.5 THEN 1 END) >= 50000 THEN 'clockwise'
