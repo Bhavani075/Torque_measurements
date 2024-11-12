@@ -11,15 +11,6 @@ avg_torque_after_max AS (
     FROM initial_value
     WHERE rn > (SELECT row_num FROM max_torque_data)  
       AND rn <= (SELECT row_num FROM max_torque_data) + 10000 
-),
-min_time_data AS (
-    SELECT torque, MIN(time) AS min_time
-    FROM initial_value
-    WHERE torque >= (SELECT avg_torque FROM avg_torque_after_max)  
-    GROUP BY torque  
 )
-SELECT torque, min_time AS time
-FROM (
-    SELECT torque, min_time, ROW_NUMBER() OVER (ORDER BY min_time DESC) AS rn
-    FROM min_time_data
-) WHERE rn = 1;
+SELECT avg_torque
+FROM  avg_torque_after_max;
