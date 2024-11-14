@@ -1,17 +1,4 @@
 WITH initial_value AS (
-    SELECT torque, ROW_NUMBER() OVER (ORDER BY time) AS rn
-    FROM Measurement_Raw_data
-),
-max_torque_data AS (
-    SELECT MAX(torque) AS max_torque, rn AS row_num   
-    FROM initial_value
-)
-SELECT torque FROM initial_value
-WHERE rn = (SELECT row_num FROM max_torque_data) + 10000;  
-
--------------------------------
-
-WITH initial_value AS (
     -- Assign row numbers for 'time' order (ascending) and 'torque' order (descending)
     SELECT torque, time,
            ROW_NUMBER() OVER (ORDER BY time) AS rn_time,   
@@ -30,6 +17,11 @@ avg_torque_after_max_time AS (
     FROM initial_value
     WHERE rn_time > (SELECT row_num_time FROM max_torque_data) 
       AND rn_time <= (SELECT row_num_time FROM max_torque_data) + 4000
+),
+----1000th value after max_peak_overshoot
+max_torque_data_1000 as (
+	SELECT torque AS max_torque_1000 FROM initial_value
+    WHERE rn_time = (SELECT row_num_time FROM max_torque_data) + 10000
 ),
 -- avg torque for the 10,000 rows after the max torque (using torque descending order)
 avg_torque_after_max_torque AS (
@@ -61,8 +53,18 @@ SELECT
        max_peak_overshoot,
        (SELECT time  FROM Measurement_Raw_data WHERE torque = (SELECT MAX(torque) FROM Measurement_Raw_data)) AS max_peak_overshoot_time,
        initial_max_peak_torque, 
-       --max_torque_1000,
+       max_torque_1000,
        initial_holding_torque, 
        (SELECT AVG(torque) FROM Measurement_Raw_data WHERE time <= 0.5) AS measurement_error,
        lin_or_peak
-FROM Measurement_Raw_data,ratio_and_difference,max_torque_data;
+FROM Measurement_Raw_data,ratio_and_difference,max_torque_data,max_torque_data_1000;
+
+/*
+ query 1 : direction
+ query 2 : max torque and time---Max Peak Overshoot 
+ query 3 : 4000 --  initial_Max Peak Torque
+ query 4 : 10000th value = max_torque_1000
+ query 5 : 10000---initial_Holding Torque
+ query 6 : avg(0.5s) - measurement error
+ query 7 : linear/ peak
+ * */
