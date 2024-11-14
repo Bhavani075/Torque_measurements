@@ -1,12 +1,70 @@
-----Determine Direction CW or ACW, Max(torque), avg(torque)<=0.5
+WITH initial_value AS (
+    -- Assign row numbers for 'time' order (ascending) and 'torque' order (descending)
+    SELECT torque, time,
+           ROW_NUMBER() OVER (ORDER BY time) AS rn_time,   
+           ROW_NUMBER() OVER (ORDER BY torque DESC) AS rn_torque 
+    FROM Measurement_Raw_data
+),
+-- max torque and its row num based on time and torque 
+max_torque_data AS (
+    SELECT MAX(torque) AS max_peak_overshoot, rn_time AS row_num_time, rn_torque AS row_num_torque
+    FROM initial_value
+),
 
-
+-- avg torque for the 4000 rows after the max torque (using time order)
+avg_torque_after_max_time AS (
+    SELECT AVG(torque) AS initial_max_peak_torque
+    FROM initial_value
+    WHERE rn_time > (SELECT row_num_time FROM max_torque_data) 
+      AND rn_time <= (SELECT row_num_time FROM max_torque_data) + 4000
+),
+----1000th value after max_peak_overshoot
+max_torque_data_1000 as (
+	SELECT torque AS max_torque_1000 FROM initial_value
+    WHERE rn_time = (SELECT row_num_time FROM max_torque_data) + 10000
+),
+-- avg torque for the 10,000 rows after the max torque (using torque descending order)
+avg_torque_after_max_torque AS (
+    SELECT AVG(torque) AS initial_holding_torque
+    FROM initial_value
+    WHERE rn_torque > (SELECT row_num_torque FROM max_torque_data)  
+      AND rn_torque <= (SELECT row_num_torque FROM max_torque_data) + 10000
+),
+-- calculations to find out Lin or Peak
+ratio_and_difference AS (
+    SELECT initial_max_peak_torque,
+           initial_holding_torque,
+           initial_max_peak_torque / initial_holding_torque AS ratio,
+           initial_holding_torque - initial_max_peak_torque AS difference,
+           CASE 
+               WHEN (initial_max_peak_torque / initial_holding_torque) >= 0.9 
+                    AND (initial_holding_torque - initial_max_peak_torque) <= 0.5 
+               THEN 'Lin'
+               ELSE 'Peak'
+           END AS lin_or_peak
+    FROM avg_torque_after_max_time, avg_torque_after_max_torque
+)
+-- Final result selection with additional values
 SELECT 
-    CASE 
-        WHEN COUNT(CASE WHEN torque >= -0.5 THEN 1 END) >= 50000 THEN 'clockwise'
-        ELSE 'anticlockwise' 
-    END AS direction,
-    (SELECT MAX(torque) FROM Measurement_Raw_data) AS max_torque,
-    (SELECT time  FROM Measurement_Raw_data WHERE torque = (SELECT MAX(torque) FROM Measurement_Raw_data)) AS max_torque_time,
-    (SELECT AVG(torque) FROM Measurement_Raw_data WHERE time <= 0.5) AS avg_torque
-FROM Measurement_Raw_data;
+       CASE 
+           WHEN COUNT(CASE WHEN torque >= -0.5 THEN 1 END) >= 50000 THEN 'clockwise'
+           ELSE 'anticlockwise' 
+       END AS direction,
+       max_peak_overshoot,
+       (SELECT time  FROM Measurement_Raw_data WHERE torque = (SELECT MAX(torque) FROM Measurement_Raw_data)) AS max_peak_overshoot_time,
+       initial_max_peak_torque, 
+       max_torque_1000,
+       initial_holding_torque, 
+       (SELECT AVG(torque) FROM Measurement_Raw_data WHERE time <= 0.5) AS measurement_error,
+       lin_or_peak
+FROM Measurement_Raw_data,ratio_and_difference,max_torque_data,max_torque_data_1000;
+
+/*
+ query 1 : direction
+ query 2 : max torque and time---Max Peak Overshoot 
+ query 3 : 4000 --  initial_Max Peak Torque
+ query 4 : 10000th value = max_torque_1000
+ query 5 : 10000---initial_Holding Torque
+ query 6 : avg(0.5s) - measurement error
+ query 7 : linear/ peak
+ */
