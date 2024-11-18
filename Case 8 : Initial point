@@ -13,7 +13,7 @@ backtrack_torque AS (
     WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
       AND torque <= 0 -- Torque near zero 
 )
-SELECT torque, time
+SELECT torque AS trq0, time
 FROM backtrack_torque
 ORDER BY rn  desc
 LIMIT 1;-- Find the latest row before max torque
