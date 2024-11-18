@@ -3,9 +3,8 @@ WITH initial_value AS (
     FROM Measurement_Raw_data
 ),
 max_torque_data AS (
-    SELECT MAX(torque) AS max_torque, rn AS row_num  -- find the max(torque) AND its ROW num
+    SELECT MAX(torque) AS max_torque, rn AS row_num  -- find the max(torque) AND its row num
     FROM initial_value
-    WHERE torque = (SELECT MAX(torque) FROM initial_value)
 ),
 backtrack_torque AS (
     SELECT torque, time, rn
