@@ -1,0 +1,19 @@
+WITH initial_value AS (
+    SELECT torque, time, ROW_NUMBER() OVER (ORDER BY time ) AS rn
+    FROM Measurement_Raw_data
+),
+max_torque_data AS (
+    SELECT MAX(torque) AS max_torque, rn AS row_num  -- find the max(torque) AND its ROW num
+    FROM initial_value
+    WHERE torque = (SELECT MAX(torque) FROM initial_value)
+),
+backtrack_torque AS (
+    SELECT torque, time, rn
+    FROM initial_value
+    WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
+      AND torque <= 0 -- Torque near zero 
+)
+SELECT torque, time
+FROM backtrack_torque
+ORDER BY rn  desc
+LIMIT 1;-- Find the latest row before max torque
