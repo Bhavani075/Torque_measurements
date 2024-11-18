@@ -1,0 +1,39 @@
+--Calculate/determine the 10% & 90% measurement points T10 & T90
+
+WITH initial_value AS (
+    SELECT torque, time, ROW_NUMBER() OVER (ORDER BY time) AS rn
+    FROM Measurement_Raw_data
+),
+max_torque_data AS (
+    SELECT MAX(torque) AS max_torque,time AS max_torque_time, rn AS row_num  -- Find the max(torque) and its row number
+    FROM initial_value
+),
+target_torque AS (
+    SELECT 0.9 * max_torque AS target_value_90,   -- Calculate 90% of max torque
+           0.1 * max_torque AS target_value_10    -- Calculate 10% of max torque
+    FROM max_torque_data
+),
+closest_torque_90 AS (
+    SELECT torque, time, rn
+    FROM initial_value
+    WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
+    AND torque <= (SELECT target_value_90 FROM target_torque)
+    ORDER BY torque DESC -- Closest torque for 90% of max torque
+    LIMIT 1
+),
+closest_torque_10 AS (
+    SELECT torque, time, rn
+    FROM initial_value
+    WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
+    AND torque <= (SELECT target_value_10 FROM target_torque)
+    ORDER BY torque DESC -- Closest torque for 10% of max torque
+    LIMIT 1
+)
+SELECT 
+    max_torque AS trq100,
+	max_torque_time AS t100,
+	(SELECT torque FROM closest_torque_90) AS trq90,
+    (SELECT time FROM closest_torque_90) AS t90,
+    (SELECT torque FROM closest_torque_10) AS trq10,
+    (SELECT time FROM closest_torque_10) AS t10
+FROM max_torque_data;
