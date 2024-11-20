@@ -1,55 +1,80 @@
 --Calculate/determine the 10% & 90% measurement points T10 & T90
 --integrated with initial torque point
 
+
 WITH initial_value AS (
+    -- Extract torque and time, assigning a row number for ordering
     SELECT torque, time, ROW_NUMBER() OVER (ORDER BY time) AS rn
     FROM Measurement_Raw_data
 ),
--- Find the max(torque),time and its row number
-max_torque_data AS (
-    SELECT MAX(torque) AS max_torque,time AS max_torque_time, rn AS row_num  
+-- Find the max(torque), time, and its row number
+max_peak_overshoot AS (
+    SELECT MAX(torque) AS max_torque, time AS max_torque_time, rn AS row_num_max
     FROM initial_value
 ),
---initial torque point, where torque is closest to 0
+-- Calculate the average torque over 20 rows after the max torque point
+max_peak_torque_data AS (
+    SELECT AVG(torque) AS max_peak_torque, rn AS row_num  
+    FROM initial_value
+    WHERE rn > (SELECT row_num_max FROM max_peak_overshoot)   -- Select rows after the maximum torque
+      AND rn <= (SELECT row_num_max FROM max_peak_overshoot) + 4000
+),
+-- Find the initial point where torque is closest to 0 before the max torque
 initial_torque_point AS (
     SELECT torque, time, rn
     FROM initial_value
-    WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
-    AND torque <= 0 -- Torque near 0 
-    ORDER BY rn DESC 
+    WHERE rn < (SELECT row_num_max FROM max_peak_overshoot) -- Rows before max torque
+      AND torque <= 0 -- Torque near 0
+    ORDER BY rn DESC
     LIMIT 1
 ),
---Calculate 90% and 10% of the maximum torque
+-- Calculate 90% and 10% of the maximum torque
 target_torque AS (
-    SELECT 0.9 * max_torque AS target_value_90,   -- Calculate 90% of max torque
-           0.1 * max_torque AS target_value_10    -- Calculate 10% of max torque
-    FROM max_torque_data
+    SELECT 0.9 * max_peak_torque AS target_value_90,   -- Calculate 90% of max torque
+           0.1 * max_peak_torque AS target_value_10    -- Calculate 10% of max torque
+    FROM max_peak_torque_data
 ),
---to find the torque value closest to 10%(max_torque)
+-- Find the torque value closest to 10% of max torque after the row of initial_torque_point
 closest_torque_10 AS (
     SELECT torque, time, rn
     FROM initial_value
-    WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
-    AND torque <= (SELECT target_value_10 FROM target_torque)
-    ORDER BY torque DESC -- Closest torque for 10% of max torque
+   WHERE rn > (SELECT rn FROM initial_torque_point)  -- Rows after initial_torque_point
+   and time <(select max_torque_time from max_peak_overshoot)
+   AND torque <= (SELECT target_value_10 FROM target_torque)  -- Torque greater than or equal to target
+    ORDER BY torque desc   -- Closest torque greater than or equal to target, earliest occurrence
     LIMIT 1
 ),
-----to find the torque value closest to 90%(max_torque)
+-- Find the torque value closest to 90% of max torque
 closest_torque_90 AS (
-    SELECT torque, time, rn
+  SELECT torque, time, rn
     FROM initial_value
-    WHERE rn < (SELECT row_num FROM max_torque_data) -- Rows before max torque
+    WHERE rn < (SELECT row_num FROM max_peak_torque_data) -- Rows before max torque
+    and time <(select max_torque_time from max_peak_overshoot)
     AND torque <= (SELECT target_value_90 FROM target_torque)
     ORDER BY torque DESC -- Closest torque for 90% of max torque
     LIMIT 1
+),
+rise_time_data AS (
+    SELECT
+        (SELECT time FROM closest_torque_90) - (SELECT time FROM closest_torque_10) AS rise_time
+),
+--Slewrate = (Trq90 - Trq10)/(Time90 - Time10)
+slew_rate_data AS (
+SELECT
+        ((SELECT torque FROM closest_torque_90) - (SELECT torque FROM closest_torque_10))/
+        ((SELECT time FROM closest_torque_90) - (SELECT time FROM closest_torque_10)) AS slew_rate
 )
-SELECT 
-	(SELECT torque FROM initial_torque_point) AS trq0,
-	(SELECT time FROM initial_torque_point) AS t0,
+SELECT
+    -- Final output
+    (SELECT torque FROM initial_torque_point) AS trq0,
+    (SELECT time FROM initial_torque_point) AS t0,
+    target_value_10,
     (SELECT torque FROM closest_torque_10) AS trq10,
     (SELECT time FROM closest_torque_10) AS t10,
+    target_value_90,
     (SELECT torque FROM closest_torque_90) AS trq90,
     (SELECT time FROM closest_torque_90) AS t90,
-    max_torque AS trq100,
-	max_torque_time AS t100
-FROM max_torque_data;
+    max_peak_torque AS trq100,
+    rise_time,
+    slew_rate
+FROM max_peak_overshoot, max_peak_torque_data,target_torque,rise_time_data,slew_rate_data;
