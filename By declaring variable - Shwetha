@@ -1,0 +1,79 @@
+-- Declare all variables explicitly
+WITH parameters AS (
+    SELECT 
+        'Measurement_v1' AS version,          -- Version or identifier
+        4000 AS time_window,                  -- Number of rows for avg torque after max (time order)
+        10000 AS torque_window,               -- Number of rows for avg torque after max (torque descending order)
+        1000 AS offset_row,                   -- Offset for the 1000th row after max torque
+        -0.5 AS torque_threshold,             -- Threshold for direction calculation
+        0.5 AS error_time,                    -- Time threshold for measurement error calculation
+        0.9 AS lin_ratio_threshold,           -- Threshold for linear determination (ratio)
+        0.5 AS lin_difference_threshold,      -- Threshold for linear determination (difference)
+        50000 AS direction_threshold,         -- Threshold count for direction determination
+        'clockwise' AS clockwise_label,       -- Label for clockwise direction
+        'anticlockwise' AS anticlockwise_label, -- Label for anticlockwise direction
+        'Lin' AS lin_label,                   -- Label for linear type
+        'Peak' AS peak_label                  -- Label for peak type
+),
+initial_value AS (
+    -- Assign row numbers for 'time' order (ascending) and 'torque' order (descending)
+    SELECT torque, time,
+           ROW_NUMBER() OVER (ORDER BY time) AS rn_time,   
+           ROW_NUMBER() OVER (ORDER BY torque DESC) AS rn_torque 
+    FROM Measurement_Raw_data -- Replace dynamically if needed
+),
+-- Max torque and its row number based on time and torque
+max_torque_data AS (
+    SELECT MAX(torque) AS max_peak_overshoot, rn_time AS row_num_time, rn_torque AS row_num_torque
+    FROM initial_value
+),
+-- Avg torque for the time window rows after the max torque (using time order)
+avg_torque_after_max_time AS (
+    SELECT AVG(torque) AS initial_max_peak_torque
+    FROM initial_value, parameters
+    WHERE rn_time > (SELECT row_num_time FROM max_torque_data) 
+      AND rn_time <= (SELECT row_num_time FROM max_torque_data) + (SELECT time_window FROM parameters)
+),
+-- 1000th value after max_peak_overshoot
+max_torque_data_1000 AS (
+    SELECT torque AS max_torque_1000 
+    FROM initial_value, parameters
+    WHERE rn_time = (SELECT row_num_time FROM max_torque_data) + (SELECT offset_row FROM parameters)
+),
+-- Avg torque for the torque window rows after the max torque (using torque descending order)
+avg_torque_after_max_torque AS (
+    SELECT AVG(torque) AS initial_holding_torque
+    FROM initial_value, parameters
+    WHERE rn_torque > (SELECT row_num_torque FROM max_torque_data)  
+      AND rn_torque <= (SELECT row_num_torque FROM max_torque_data) + (SELECT torque_window FROM parameters)
+),
+-- Calculations to find out Lin or Peak
+ratio_and_difference AS (
+    SELECT initial_max_peak_torque,
+           initial_holding_torque,
+           initial_max_peak_torque / initial_holding_torque AS ratio,
+           initial_holding_torque - initial_max_peak_torque AS difference,
+           CASE 
+               WHEN (initial_max_peak_torque / initial_holding_torque) >= (SELECT lin_ratio_threshold FROM parameters)
+                    AND (initial_holding_torque - initial_max_peak_torque) <= (SELECT lin_difference_threshold FROM parameters)
+               THEN (SELECT lin_label FROM parameters) -- Use variable for Lin label
+               ELSE (SELECT peak_label FROM parameters) -- Use variable for Peak label
+           END AS lin_or_peak
+    FROM avg_torque_after_max_time, avg_torque_after_max_torque, parameters
+)
+-- Final result selection with additional values
+SELECT 
+       CASE 
+           WHEN COUNT(CASE WHEN torque >= (SELECT torque_threshold FROM parameters) THEN 1 END) >= (SELECT direction_threshold FROM parameters)
+           THEN (SELECT clockwise_label FROM parameters) -- Use variable for clockwise label
+           ELSE (SELECT anticlockwise_label FROM parameters) -- Use variable for anticlockwise label
+       END AS direction,
+       max_peak_overshoot,
+       (SELECT time FROM Measurement_Raw_data WHERE torque = (SELECT MAX(torque) FROM Measurement_Raw_data)) AS max_peak_overshoot_time,
+       initial_max_peak_torque, 
+       max_torque_1000,
+       initial_holding_torque, 
+       (SELECT AVG(torque) FROM Measurement_Raw_data WHERE time <= (SELECT error_time FROM parameters)) AS measurement_error,
+       lin_or_peak, -- Include lin_or_peak column from ratio_and_difference
+       (SELECT version FROM parameters) AS version
+FROM Measurement_Raw_data, ratio_and_difference, max_torque_data, max_torque_data_1000;
