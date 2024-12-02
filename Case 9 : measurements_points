@@ -2,6 +2,7 @@
 --integrated with initial torque point
 
 
+
 WITH initial_value AS (
     -- Extract torque and time, assigning a row number for ordering
     SELECT torque, time, ROW_NUMBER() OVER (ORDER BY time) AS rn
@@ -18,6 +19,14 @@ max_peak_torque_data AS (
     FROM initial_value
     WHERE rn > (SELECT row_num_max FROM max_peak_overshoot)   -- Select rows after the maximum torque
       AND rn <= (SELECT row_num_max FROM max_peak_overshoot) + 4000
+),
+-- Find the torque value closest to 100% of max torque
+closest_torque_100 AS (
+SELECT torque, time
+FROM initial_value
+WHERE time <= (SELECT max_torque_time FROM max_peak_overshoot)
+ORDER BY ABS(torque - (SELECT max_peak_torque FROM max_peak_torque_data))
+LIMIT 1
 ),
 -- Find the initial point where torque is closest to 0 before the max torque
 initial_torque_point AS (
@@ -74,7 +83,9 @@ SELECT
     target_value_90,
     (SELECT torque FROM closest_torque_90) AS trq90,
     (SELECT time FROM closest_torque_90) AS t90,
-    max_peak_torque AS trq100,
+    max_peak_torque AS target_value_100,
+    (SELECT torque FROM closest_torque_100) AS trq100,
+    (SELECT time FROM closest_torque_100) AS trq100,
     rise_time,
     slew_rate
 FROM max_peak_overshoot, max_peak_torque_data,target_torque,rise_time_data,slew_rate_data;
