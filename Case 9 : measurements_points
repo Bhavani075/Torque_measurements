@@ -75,17 +75,19 @@ SELECT
 )
 SELECT
     -- Final output
-    (SELECT torque FROM initial_torque_point) AS trq0,
-    (SELECT time FROM initial_torque_point) AS t0,
-    target_value_10,
-    (SELECT torque FROM closest_torque_10) AS trq10,
-    (SELECT time FROM closest_torque_10) AS t10,
-    target_value_90,
-    (SELECT torque FROM closest_torque_90) AS trq90,
-    (SELECT time FROM closest_torque_90) AS t90,
-    max_peak_torque AS target_value_100,
-    (SELECT torque FROM closest_torque_100) AS trq100,
-    (SELECT time FROM closest_torque_100) AS trq100,
-    rise_time,
-    slew_rate
+   (SELECT torque FROM initial_torque_point) AS trq0,
+   (SELECT time FROM initial_torque_point) AS t0,
+   target_value_10,
+   (SELECT torque FROM closest_torque_10) AS trq10,
+   (SELECT time FROM closest_torque_10) AS t10,
+   target_value_90,
+   (SELECT torque FROM closest_torque_90) AS trq90,
+   (SELECT time FROM closest_torque_90) AS t90,
+   max_peak_torque AS target_value_100,
+   (SELECT torque FROM closest_torque_100) AS trq100,
+   (SELECT time FROM closest_torque_100) AS t100,
+   rise_time,
+   slew_rate,
+   (SELECT torque FROM closest_torque_100) AS A,
+   ((SELECT MAX(torque) FROM Measurement_Raw_data)-(SELECT torque FROM closest_torque_100)) AS B
 FROM max_peak_overshoot, max_peak_torque_data,target_torque,rise_time_data,slew_rate_data;
