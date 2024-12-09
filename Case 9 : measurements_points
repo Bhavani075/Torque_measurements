@@ -1,7 +1,6 @@
 --Calculate/determine the 10% & 90% measurement points T10 & T90
 --integrated with initial torque point
-
-
+--T0, Ts(settling point), T100, rise time,slew rate, A, B
 
 WITH initial_value AS (
     -- Extract torque and time, assigning a row number for ordering
@@ -63,6 +62,18 @@ closest_torque_90 AS (
     ORDER BY torque DESC -- Closest torque for 90% of max torque
     LIMIT 1
 ),
+-- first torque value that leaves the range [t100 - 0.5, t100 + 0.5] from the end
+settling_point AS (
+SELECT torque, time
+FROM initial_value
+WHERE time NOT BETWEEN 
+        (SELECT time - 0.25 FROM closest_torque_100) 
+        AND 
+        (SELECT time + 0.25 FROM closest_torque_100)
+ 		AND time < (SELECT time FROM closest_torque_100)
+ORDER BY time DESC
+LIMIT 1
+),
 rise_time_data AS (
     SELECT
         (SELECT time FROM closest_torque_90) - (SELECT time FROM closest_torque_10) AS rise_time
@@ -86,6 +97,8 @@ SELECT
    max_peak_torque AS target_value_100,
    (SELECT torque FROM closest_torque_100) AS trq100,
    (SELECT time FROM closest_torque_100) AS t100,
+   (SELECT torque FROM settling_point) AS trqS,
+   (SELECT time FROM settling_point) AS tS,
    rise_time,
    slew_rate,
    (SELECT torque FROM closest_torque_100) AS A,
