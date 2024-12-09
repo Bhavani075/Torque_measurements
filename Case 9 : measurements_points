@@ -1,6 +1,7 @@
+
 --Calculate/determine the 10% & 90% measurement points T10 & T90
 --integrated with initial torque point
---T0, Ts(settling point), T100, rise time,slew rate, A, B
+--T0, Ts(settling point), T100, rise time,slew rate, A, B, TN,TOS,TOS2
 
 WITH initial_value AS (
     -- Extract torque and time, assigning a row number for ordering
@@ -83,6 +84,24 @@ slew_rate_data AS (
 SELECT
         ((SELECT torque FROM closest_torque_90) - (SELECT torque FROM closest_torque_10))/
         ((SELECT time FROM closest_torque_90) - (SELECT time FROM closest_torque_10)) AS slew_rate
+),
+---highest negative value
+highest_negative_value AS (
+	SELECT torque, time FROM initial_value
+	WHERE time <(SELECT max_torque_time FROM max_peak_overshoot)
+	AND 
+	time >(SELECT time FROM settling_point)
+	ORDER BY torque 
+	LIMIT 1
+),
+--second highest overshoot
+second_highest_overshoot AS (
+SELECT torque, time FROM initial_value
+	WHERE time < (SELECT time FROM highest_negative_value)
+	AND 
+	time >(SELECT time FROM settling_point)
+	ORDER BY torque desc
+	LIMIT 1
 )
 SELECT
     -- Final output
@@ -102,5 +121,11 @@ SELECT
    rise_time,
    slew_rate,
    (SELECT torque FROM closest_torque_100) AS A,
-   ((SELECT MAX(torque) FROM Measurement_Raw_data)-(SELECT torque FROM closest_torque_100)) AS B
+   ((SELECT MAX(torque) FROM Measurement_Raw_data)-(SELECT torque FROM closest_torque_100)) AS B,
+   max_torque AS trqOS,
+   max_torque_time AS tOS,
+   (SELECT torque FROM highest_negative_value) AS trqN,
+   (SELECT time FROM highest_negative_value) AS tN,
+   (SELECT torque FROM second_highest_overshoot) AS trqOS2,
+   (SELECT time FROM second_highest_overshoot) AS tOS2
 FROM max_peak_overshoot, max_peak_torque_data,target_torque,rise_time_data,slew_rate_data;
