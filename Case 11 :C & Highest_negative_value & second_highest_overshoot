@@ -1,41 +1,45 @@
-
-   
-  
 WITH initial_value AS (
-    -- Extract torque and time, assigning a row number for ordering
+-- Extract torque and time, assigning a row number for ordering
     SELECT torque, time, ROW_NUMBER() OVER (ORDER BY time) AS rn
     FROM Measurement_Raw_data
 ),
+-- Find the max torque and corresponding time and row number
 max_peak_overshoot AS (
-    -- Find the max torque and corresponding time and row number
     SELECT MAX(torque) AS max_torque, time AS max_torque_time, rn AS row_num_max
     FROM initial_value
 ),
+-- 10000th data from tail end
+avg_torque_after_max AS (
+    SELECT *
+    FROM initial_value
+    WHERE rn > (SELECT row_num_max FROM max_peak_overshoot)  
+    AND rn <= (SELECT row_num_max FROM max_peak_overshoot) + 10000 
+),
+-- Calculate the average torque over 4000 rows after the max torque point
 max_peak_torque_data AS (
-    -- Calculate the average torque over 4000 rows after the max torque point
     SELECT AVG(torque) AS max_peak_torque, rn AS row_num  
     FROM initial_value
     WHERE rn > (SELECT row_num_max FROM max_peak_overshoot)   -- Rows after max torque
-      AND rn <= (SELECT row_num_max FROM max_peak_overshoot) + 4000
+    AND rn <= (SELECT row_num_max FROM max_peak_overshoot) + 4000
 ),
+-- Find the torque value closest to 100% of max peak torque
 closest_torque_100 AS (
-    -- Find the torque value closest to 100% of max peak torque
     SELECT torque, time
     FROM initial_value
     WHERE time <= (SELECT max_torque_time FROM max_peak_overshoot)
     ORDER BY ABS(torque - (SELECT max_peak_torque FROM max_peak_torque_data))
     LIMIT 1
 ),
+-- First torque value that leaves the range of closest_torque_100 ± 0.25
 settling_point AS (
-    -- First torque value that leaves the range of closest_torque_100 ± 0.25
     SELECT m.torque, m.time
     FROM Measurement_Raw_data m
-    WHERE --m.time > 2.596067832 AND
-     m.time< 4.795052311
-    AND (m.torque < 15.50285149 - 0.25 OR m.torque > 15.50285149 + 0.25)
+    WHERE m.time< (SELECT time FROM  avg_torque_after_max order by rn DESC limit 1)
+    AND (m.torque < (SELECT torque FROM closest_torque_100) - 0.25 OR m.torque >  (SELECT torque FROM closest_torque_100) + 0.25)
     order BY time DESC
     LIMIT 1
 ),
+-- Find the highest negative value
 highest_negative_value AS (
 	SELECT torque, time FROM initial_value
 	WHERE time >(SELECT max_torque_time FROM max_peak_overshoot)
@@ -43,14 +47,15 @@ highest_negative_value AS (
 	ORDER BY torque 
 	LIMIT 1
 ),
+-- Find the second highest overshoot torque
 second_highest_overshoot AS (
-    -- Find the second highest overshoot torque
     SELECT torque, time FROM initial_value
     WHERE time > (SELECT time FROM highest_negative_value)
     AND time < (SELECT time FROM settling_point)
     ORDER BY torque DESC
     LIMIT 1
 )
+--Final display of result set
 SELECT 
     max_torque AS trqOS,
     max_torque_time AS tOS,
@@ -64,3 +69,6 @@ SELECT
     (SELECT torque FROM second_highest_overshoot) AS trqOS2,
     (SELECT time FROM second_highest_overshoot) AS tOS2,
     ((SELECT torque FROM second_highest_overshoot)-(SELECT torque FROM closest_torque_100)) AS C
+    FROM max_peak_overshoot, max_peak_torque_data;
+	
+
