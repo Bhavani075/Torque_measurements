@@ -19,7 +19,7 @@ avg_torque_after_max AS (
     WHERE rn > (SELECT row_num_max FROM max_peak_overshoot)  
     AND rn <= (SELECT row_num_max FROM max_peak_overshoot) + 10000 
  ),
--- Calculate the average torque over 20 rows after the max torque point
+-- Calculate the average torque over 4000 rows after the max torque point
 max_peak_torque_data AS (
     SELECT AVG(torque) AS max_peak_torque, rn AS row_num  
     FROM initial_value
